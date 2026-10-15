@@ -30,7 +30,6 @@ jobs:
           import json
           import os
           import subprocess
-          import urllib.request
           from pathlib import Path
 
           repo = 'gabrielfanart4-gif/ct-gremio-jp'
@@ -60,27 +59,36 @@ jobs:
               'Compilação, assinatura, recursos da logo e alinhamento de 16 KB verificados. Teste em aparelho físico não realizado neste ambiente.\n\n'
               'SHA-256 do APK: ' + expected_sha + '\n'
           )
-          api_path = 'repos/' + repo + '/releases/tags/' + tag
-          existing = subprocess.run(['gh', 'api', api_path], capture_output=True, text=True)
-          if existing.returncode == 0:
-              release = json.loads(existing.stdout)
-              assets = release.get('assets', [])
-              if assets:
-                  assert len(assets) == 1 and assets[0]['name'] == filename.name
-                  assert assets[0]['digest'] == 'sha256:' + expected_sha
-                  assert assets[0]['size'] == expected_size
-              else:
-                  assert release['draft'], 'Existing published release has no APK'
-                  subprocess.run(['gh', 'release', 'upload', tag, str(filename), '--repo', repo], check=True)
-          else:
-              assert '404' in existing.stderr, 'Could not read target release'
+          api_path = 'repos/' + repo + '/releases'
+          def releases_for_tag():
+              result = subprocess.run(['gh', 'api', api_path], capture_output=True, text=True, check=True)
+              return [release for release in json.loads(result.stdout) if release['tag_name'] == tag]
+          releases = releases_for_tag()
+          assert len(releases) <= 1, 'Multiple releases with the same tag require review'
+          if not releases:
               subprocess.run(['gh', 'release', 'create', tag, str(filename), '--repo', repo, '--draft', '--title', 'CT Grêmio JP 1.0.0 (24)', '--notes-file', str(notes)], check=True)
-          result = subprocess.run(['gh', 'api', api_path], capture_output=True, text=True, check=True)
+              releases = releases_for_tag()
+          assert len(releases) == 1, 'Could not locate the release'
+          release = releases[0]
+          release_path = api_path + '/' + str(release['id'])
+          if not release['assets']:
+              assert release['draft'], 'Existing published release has no APK'
+              subprocess.run(['gh', 'release', 'upload', tag, str(filename), '--repo', repo], check=True)
+          result = subprocess.run(['gh', 'api', release_path], capture_output=True, text=True, check=True)
           release = json.loads(result.stdout)
           assets = release['assets']
           assert len(assets) == 1 and assets[0]['name'] == filename.name
           assert assets[0]['size'] == expected_size
           assert assets[0]['digest'] == 'sha256:' + expected_sha, 'Uploaded asset digest mismatch'
-          subprocess.run(['gh', 'release', 'edit', tag, '--repo', repo, '--draft=false', '--latest', '--title', 'CT Grêmio JP 1.0.0 (24)', '--notes-file', str(notes)], check=True)
-          print('Published verified APK: ' + tag)
+          if release['draft']:
+              latest = subprocess.run(['gh', 'api', api_path + '/latest'], capture_output=True, text=True)
+              if latest.returncode == 0:
+                  latest_tag = json.loads(latest.stdout)['tag_name']
+                  assert not latest_tag.startswith('v1.0.0-') or int(latest_tag.rsplit('-', 1)[1]) <= 24, 'A newer APK is already published'
+              else:
+                  assert '404' in latest.stderr, 'Could not check latest release'
+              payload = Path('publish.json')
+              payload.write_text(json.dumps({'draft': False, 'make_latest': 'true'}))
+              subprocess.run(['gh', 'api', '--method', 'PATCH', release_path, '--input', str(payload)], check=True)
+          print('Verified published APK: ' + tag)
           PY
