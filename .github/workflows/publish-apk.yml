@@ -41,12 +41,12 @@ jobs:
           source = 'https://expo.dev/artifacts/eas/Hr0R5Y-v381k_RzzEamz7ezCK9rTIBZR1VhsVutxI58.apk'
           filename = Path('ct-gremio-jp.apk')
           digest = hashlib.sha256()
-          with urllib.request.urlopen(source, timeout=120) as response, filename.open('wb') as output:
+          subprocess.run(['curl', '--fail', '--silent', '--show-error', '--location', '--retry', '2', source, '--output', str(filename)], check=True)
+          with filename.open('rb') as downloaded:
               while True:
-                  chunk = response.read(1024 * 1024)
+                  chunk = downloaded.read(1024 * 1024)
                   if not chunk:
                       break
-                  output.write(chunk)
                   digest.update(chunk)
           assert filename.stat().st_size == expected_size, 'Unexpected APK size'
           assert digest.hexdigest() == expected_sha, 'APK checksum mismatch'
