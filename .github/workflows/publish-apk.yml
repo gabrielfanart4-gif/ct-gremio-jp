@@ -1,0 +1,86 @@
+name: Publicar APK validado
+
+on:
+  push:
+    paths:
+      - '.github/workflows/publish-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-ct-gremio-apk
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar e publicar o APK com integridade verificada
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          import urllib.request
+          from pathlib import Path
+
+          repo = 'gabrielfanart4-gif/ct-gremio-jp'
+          assert os.environ['GH_REPO'] == repo
+          tag = 'v1.0.0-24'
+          expected_sha = '4f902cd1fbae19fa92db7d7ba86e64153bc60d9f8a51e0a1db53ca466197ec81'
+          expected_size = 108798951
+          source = 'https://expo.dev/artifacts/eas/Hr0R5Y-v381k_RzzEamz7ezCK9rTIBZR1VhsVutxI58.apk'
+          filename = Path('ct-gremio-jp.apk')
+          digest = hashlib.sha256()
+          with urllib.request.urlopen(source, timeout=120) as response, filename.open('wb') as output:
+              while True:
+                  chunk = response.read(1024 * 1024)
+                  if not chunk:
+                      break
+                  output.write(chunk)
+                  digest.update(chunk)
+          assert filename.stat().st_size == expected_size, 'Unexpected APK size'
+          assert digest.hexdigest() == expected_sha, 'APK checksum mismatch'
+          notes = Path('release-notes.md')
+          notes.write_text(
+              'Atualização CT Grêmio JP — versão 1.0.0 (24)\n\n'
+              '- Scout simplificado e análise integrada ao servidor do clube na Railway.\n'
+              '- Escolha individual das medidas solicitadas nos formulários de inscrição.\n'
+              '- Atualizações dos alertas e correção dos avisos de mensalidades quitadas.\n\n'
+              'Pacote br.com.ctgremio.app, Android 7 ou superior. Assinatura original conferida para atualizar a instalação oficial anterior.\n\n'
+              'Compilação, assinatura, recursos da logo e alinhamento de 16 KB verificados. Teste em aparelho físico não realizado neste ambiente.\n\n'
+              'SHA-256 do APK: ' + expected_sha + '\n'
+          )
+          api_path = 'repos/' + repo + '/releases/tags/' + tag
+          existing = subprocess.run(['gh', 'api', api_path], capture_output=True, text=True)
+          if existing.returncode == 0:
+              release = json.loads(existing.stdout)
+              assets = release.get('assets', [])
+              if assets:
+                  assert len(assets) == 1 and assets[0]['name'] == filename.name
+                  assert assets[0]['digest'] == 'sha256:' + expected_sha
+                  assert assets[0]['size'] == expected_size
+              else:
+                  assert release['draft'], 'Existing published release has no APK'
+                  subprocess.run(['gh', 'release', 'upload', tag, str(filename), '--repo', repo], check=True)
+          else:
+              assert '404' in existing.stderr, 'Could not read target release'
+              subprocess.run(['gh', 'release', 'create', tag, str(filename), '--repo', repo, '--draft', '--title', 'CT Grêmio JP 1.0.0 (24)', '--notes-file', str(notes)], check=True)
+          result = subprocess.run(['gh', 'api', api_path], capture_output=True, text=True, check=True)
+          release = json.loads(result.stdout)
+          assets = release['assets']
+          assert len(assets) == 1 and assets[0]['name'] == filename.name
+          assert assets[0]['size'] == expected_size
+          assert assets[0]['digest'] == 'sha256:' + expected_sha, 'Uploaded asset digest mismatch'
+          subprocess.run(['gh', 'release', 'edit', tag, '--repo', repo, '--draft=false', '--latest', '--title', 'CT Grêmio JP 1.0.0 (24)', '--notes-file', str(notes)], check=True)
+          print('Published verified APK: ' + tag)
+          PY
