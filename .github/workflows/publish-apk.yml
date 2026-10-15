@@ -34,10 +34,10 @@ jobs:
 
           repo = 'gabrielfanart4-gif/ct-gremio-jp'
           assert os.environ['GH_REPO'] == repo
-          tag = 'v1.0.0-25'
-          expected_sha = '761cb8b22cdc945557d1e269c9b2f7817ad882675e3dc56e7e94da25c138405d'
-          expected_size = 108799475
-          source = 'https://expo.dev/artifacts/eas/blfV11L5jnybNU1qzZeFy0Ao-NAZIPSI0XO4pkkbNdE.apk'
+          tag = 'v1.0.0-26'
+          expected_sha = 'ff06c8642ea73037c55801617f12b93f5bc858f462e74de88e0182b8e9e8b000'
+          expected_size = 108817859
+          source = 'https://expo.dev/artifacts/eas/4dhiAdm5BcH2oNVUg2LVFjKtASg4612K-9cpIO3FDUU.apk'
           filename = Path('ct-gremio-jp.apk')
           digest = hashlib.sha256()
           subprocess.run(['curl', '--fail', '--silent', '--show-error', '--location', '--retry', '2', source, '--output', str(filename)], check=True)
@@ -51,10 +51,10 @@ jobs:
           assert digest.hexdigest() == expected_sha, 'APK checksum mismatch'
           notes = Path('release-notes.md')
           notes.write_text(
-              'Atualização CT Grêmio JP — versão 1.0.0 (25)\n\n'
-              '- Correção do contador de mensagens: apenas recebidas e ainda não lidas pela própria conta.\n'
-              '- Nome CT GREMIO JP no aplicativo Android e na instalação web.\n'
-              '- Identidade e títulos atualizados também nos sites do clube.\n\n'
+              'Atualização CT Grêmio JP — versão 1.0.0 (26)\n\n'
+              '- Controles separados para inativar conta ou cobranças, com confirmação e proteção de acesso.\n'
+              '- Histórico e pagamentos preservados, sem cobrança retroativa ao reativar.\n'
+              '- Aviso de novas versões a partir deste APK e revisão de financeiro, acesso e notificações.\n\n'
               'Pacote br.com.ctgremio.app, Android 7 ou superior. Assinatura original conferida para atualizar a instalação oficial anterior.\n\n'
               'Compilação, assinatura, recursos da logo e alinhamento de 16 KB verificados. Teste em aparelho físico não realizado neste ambiente.\n\n'
               'SHA-256 do APK: ' + expected_sha + '\n'
@@ -66,7 +66,7 @@ jobs:
           releases = releases_for_tag()
           assert len(releases) <= 1, 'Multiple releases with the same tag require review'
           if not releases:
-              subprocess.run(['gh', 'release', 'create', tag, str(filename), '--repo', repo, '--draft', '--title', 'CT Grêmio JP 1.0.0 (25)', '--notes-file', str(notes)], check=True)
+              subprocess.run(['gh', 'release', 'create', tag, str(filename), '--repo', repo, '--draft', '--title', 'CT Grêmio JP 1.0.0 (26)', '--notes-file', str(notes)], check=True)
               releases = releases_for_tag()
           assert len(releases) == 1, 'Could not locate the release'
           release = releases[0]
@@ -84,7 +84,7 @@ jobs:
               latest = subprocess.run(['gh', 'api', api_path + '/latest'], capture_output=True, text=True)
               if latest.returncode == 0:
                   latest_tag = json.loads(latest.stdout)['tag_name']
-                  assert not latest_tag.startswith('v1.0.0-') or int(latest_tag.rsplit('-', 1)[1]) <= 25, 'A newer APK is already published'
+                  assert not latest_tag.startswith('v1.0.0-') or int(latest_tag.rsplit('-', 1)[1]) <= 26, 'A newer APK is already published'
               else:
                   assert '404' in latest.stderr, 'Could not check latest release'
               payload = Path('publish.json')
